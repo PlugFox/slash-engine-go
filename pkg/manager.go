@@ -1,29 +1,16 @@
-package main
-
-/*
-#include <stdint.h>
-#include <stdlib.h>
-typedef struct {
-    int id;
-    double posX;
-    double posY;
-    double velX;
-    double velY;
-    double mass;
-} Object;
-*/
-import "C"
+package pkg
 
 import (
 	"sync"
 	"time"
-	"unsafe"
 )
 
+// Vector represents a 2D vector
 type Vector struct {
 	X, Y float64
 }
 
+// Object represents a game object
 type Object struct {
 	ID            int
 	Position      Vector
@@ -33,6 +20,7 @@ type Object struct {
 	LastUpdate    time.Time
 }
 
+// World represents the game world
 type World struct {
 	Gravity      Vector
 	Boundary     Vector
@@ -45,19 +33,19 @@ type World struct {
 	updateSignal chan struct{}
 }
 
+// WorldManager manages the world instance
 type WorldManager struct {
 	once  sync.Once
 	world *World
 }
 
-//nolint:gochecknoglobals
-var manager = &WorldManager{}
-
+// Get the world instance
 func (wm *WorldManager) GetWorld() *World {
 	return wm.world
 }
 
-func (wm *WorldManager) InitWorldWithOptions(gravityX, gravityY, boundaryX, boundaryY, tickMS, rtt float64, autoStart bool) {
+// Initialize the world with options
+func (wm *WorldManager) InitWorld(gravityX, gravityY, boundaryX, boundaryY, tickMS, rtt float64, autoStart bool) {
 	wm.once.Do(func() {
 		wm.world = &World{
 			Gravity:      Vector{X: gravityX, Y: gravityY},
@@ -74,20 +62,8 @@ func (wm *WorldManager) InitWorldWithOptions(gravityX, gravityY, boundaryX, boun
 }
 
 // Add or update objects
-//
-//export UpsertObjects
-func UpsertObjects(cObjects *C.Object, count C.int) {
-	world := manager.GetWorld()
-	objects := make([]*Object, count)
-	for idx := range objects {
-		obj := (*C.Object)(unsafe.Pointer(uintptr(unsafe.Pointer(cObjects)) + uintptr(idx)*unsafe.Sizeof(*cObjects)))
-		objects[idx] = &Object{
-			ID:       int(obj.id),
-			Position: Vector{X: float64(obj.posX), Y: float64(obj.posY)},
-			Velocity: Vector{X: float64(obj.velX), Y: float64(obj.velY)},
-			Mass:     float64(obj.mass),
-		}
-	}
+func (wm *WorldManager) UpsertObjects(objects []*Object) {
+	world := wm.GetWorld()
 	world.mutex.Lock()
 	defer world.mutex.Unlock()
 	for _, obj := range objects {
@@ -107,62 +83,45 @@ func UpsertObjects(cObjects *C.Object, count C.int) {
 }
 
 // Delete objects by IDs
-//
-//export DeleteObjects
-func DeleteObjects(ids *C.int, count C.int) {
-	world := manager.GetWorld()
-	idSlice := (*[1 << 30]C.int)(unsafe.Pointer(ids))[:count:count]
+func (wm *WorldManager) DeleteObjects(ids []int) {
+	world := wm.GetWorld()
 	world.mutex.Lock()
 	defer world.mutex.Unlock()
-	for _, id := range idSlice {
-		delete(world.Objects, int(id))
+	for _, id := range ids {
+		delete(world.Objects, id)
 	}
 }
 
 // Apply impulse to an object
-//
-//export ApplyImpulse
-func ApplyImpulse(objectID C.int, impulseX, impulseY C.double) {
-	world := manager.GetWorld()
+func (wm *WorldManager) ApplyImpulse(objectID int, impulseX float64, impulseY float64) {
+	world := wm.GetWorld()
 	world.mutex.Lock()
 	defer world.mutex.Unlock()
-	if obj, ok := world.Objects[int(objectID)]; ok {
-		obj.Velocity.X += float64(impulseX) / obj.Mass
-		obj.Velocity.Y += float64(impulseY) / obj.Mass
+	if obj, ok := world.Objects[objectID]; ok {
+		obj.Velocity.X += impulseX / obj.Mass
+		obj.Velocity.Y += impulseY / obj.Mass
 	}
 }
 
 // Get all object positions
-//
-//export GetObjectPositions
-func GetObjectPositions() *C.Object {
-	world := manager.GetWorld()
+func (wm *WorldManager) GetObjectPositions() []Object {
+	world := wm.GetWorld()
 	world.mutex.RLock()
 	defer world.mutex.RUnlock()
 
 	count := len(world.Objects)
-	cObjects := C.malloc(C.size_t(count) * C.size_t(C.sizeof_Object))
-
-	i := 0
+	objects := make([]Object, count)
+	idx := 0
 	for _, obj := range world.Objects {
-		cObj := (*C.Object)(unsafe.Pointer(uintptr(cObjects) + uintptr(i)*C.sizeof_Object))
-		cObj.id = C.int(obj.ID)
-		cObj.posX = C.double(obj.Position.X)
-		cObj.posY = C.double(obj.Position.Y)
-		cObj.velX = C.double(obj.Velocity.X)
-		cObj.velY = C.double(obj.Velocity.Y)
-		cObj.mass = C.double(obj.Mass)
-		i++
+		objects[idx] = *obj
+		idx++
 	}
-
-	return (*C.Object)(cObjects)
+	return objects
 }
 
 // Stop and clear the world
-//
-//export StopWorld
-func StopWorld() {
-	world := manager.GetWorld()
+func (wm *WorldManager) StopWorld() {
+	world := wm.GetWorld()
 	world.mutex.Lock()
 	defer world.mutex.Unlock()
 	if world.running {
@@ -173,6 +132,7 @@ func StopWorld() {
 	world.Objects = make(map[int]*Object)
 }
 
+// Run the world update loop
 func (w *World) run(tickMS float64) {
 	w.running = true
 	w.updateTicker = time.NewTicker(time.Duration(tickMS) * time.Millisecond)
@@ -193,6 +153,7 @@ func (w *World) run(tickMS float64) {
 	}
 }
 
+// Update object positions
 func (w *World) update() {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
@@ -214,6 +175,7 @@ func (w *World) update() {
 	}
 }
 
+// Extrapolate object position based on velocity
 func (w *World) extrapolateObject(obj *Object) {
 	now := time.Now()
 	elapsed := now.Sub(obj.LastUpdate).Seconds()
@@ -225,6 +187,7 @@ func (w *World) extrapolateObject(obj *Object) {
 	}
 }
 
+// Clamp a value between a min and max
 func clamp(val, minValue, maxValue float64) float64 {
 	if val < minValue {
 		return minValue
@@ -234,5 +197,3 @@ func clamp(val, minValue, maxValue float64) float64 {
 	}
 	return val
 }
-
-func main() {}
