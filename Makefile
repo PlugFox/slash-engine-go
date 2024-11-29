@@ -122,7 +122,7 @@ diff: ## git diff
 .PHONY: binding
 binding: deps ## build the binding
 	mkdir -p $(BINDING_OUTPUT)
-	$(GO_BINARY) build -ldflags="-w -s $(EXTRA_LD_FLAGS)" -o $(BINDING_OUTPUT)/$(BINDING_FILE) -buildmode=$(BUILD_MODE) $(BINDING_ARGS) main.go
+	$(GO_BINARY) build -ldflags="-w -s $(EXTRA_LD_FLAGS)" -o $(BINDING_OUTPUT)/$(BINDING_FILE) -buildmode=$(BUILD_MODE) $(BINDING_ARGS) binding/main.go
 
 define print-target
     @printf "Executing target: \033[36m$@\033[0m\n"
