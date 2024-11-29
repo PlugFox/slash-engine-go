@@ -1,0 +1,16 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "[Go] Launch current file",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${file}",
+            /* "envFile": "${workspaceFolder}/.env", */
+            "cwd": "${workspaceFolder}",
+            "env": {},
+            "args": []
+        }
+    ]
+}
