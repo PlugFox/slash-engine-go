@@ -1,6 +1,15 @@
 SHELL :=/bin/bash -e -o pipefail
 PWD   := $(shell pwd)
 
+BUILD_MODE?=c-shared
+OUTPUT_DIR?=output
+GO_BINARY?=go
+BINDING_NAME?=librsa_bridge
+BINDING_FILE?=$(BINDING_NAME).so
+BINDING_ARGS?=
+BINDING_OUTPUT?=$(OUTPUT_DIR)/binding
+EXTRA_LD_FLAGS?=
+
 .DEFAULT_GOAL := all
 .PHONY: all
 all: ## build pipeline
@@ -113,17 +122,16 @@ diff: ## git diff
 .PHONY: binding
 binding: deps ## build the binding
 	mkdir -p $(BINDING_OUTPUT)
-	$(GO_BINARY) build -ldflags="-w -s $(EXTRA_LD_FLAGS)" -o $(BINDING_OUTPUT)/$(BINDING_FILE) -buildmode=$(BUILD_MODE) $(BINDING_ARGS) binding/main.go
+	$(GO_BINARY) build -ldflags="-w -s $(EXTRA_LD_FLAGS)" -o $(BINDING_OUTPUT)/$(BINDING_FILE) -buildmode=$(BUILD_MODE) $(BINDING_ARGS) main.go
 
 define print-target
     @printf "Executing target: \033[36m$@\033[0m\n"
 endef
 
-include Makefile.android
-include Makefile.ios
-include Makefile.darwin
-include Makefile.linux
-include Makefile.windows
-include Makefile.gomobile
-include Makefile.wasm
-include Makefile.flatbuffers
+#include Makefile.android
+#include Makefile.ios
+#include Makefile.darwin
+#include Makefile.linux
+#include Makefile.windows
+#include Makefile.gomobile
+#include Makefile.wasm
