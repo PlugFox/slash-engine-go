@@ -90,11 +90,14 @@ func ApplyImpulse(objectID C.int, impulseX C.double, impulseY C.double) {
 // Get all object positions
 //
 //export GetObjectPositions
-func GetObjectPositions() *C.Object {
+func GetObjectPositions(outCount *C.int) *C.Object {
 	objects := manager.GetObjectPositions()
 	count := len(objects)
+	if count == 0 {
+		return nil
+	}
+	*outCount = C.int(count) // Записываем количество объектов
 	cObjects := C.malloc(C.size_t(count) * C.size_t(C.sizeof_Object))
-
 	i := 0
 	for _, obj := range objects {
 		cObj := (*C.Object)(unsafe.Pointer(uintptr(cObjects) + uintptr(i)*C.sizeof_Object))
