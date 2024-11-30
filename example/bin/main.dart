@@ -222,7 +222,17 @@ void main() {
 
 ffi.DynamicLibrary openLib() {
   if (io.Platform.isMacOS) {
-    const lib = 'output/binding/darwin/arm64/librsa_bridge.dylib';
+    const lib = 'output/binding/darwin/arm64/slashengine.dylib';
+    final path = '${io.Directory.current.parent.path}/$lib';
+    assert(io.File(path).existsSync(), 'File not found: $path');
+    return ffi.DynamicLibrary.open(path);
+  } else if (io.Platform.isLinux) {
+    const lib = 'output/binding/linux/aarch64/slashengine.so';
+    final path = '${io.Directory.current.parent.path}/$lib';
+    assert(io.File(path).existsSync(), 'File not found: $path');
+    return ffi.DynamicLibrary.open(path);
+  } else if (io.Platform.isWindows) {
+    const lib = 'output/binding/windows/amd64/slashengine.dll';
     final path = '${io.Directory.current.parent.path}/$lib';
     assert(io.File(path).existsSync(), 'File not found: $path');
     return ffi.DynamicLibrary.open(path);
