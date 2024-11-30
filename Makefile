@@ -316,19 +316,19 @@ binding_linux: binding_linux_386 binding_linux_amd64 binding_linux_arm64
 binding_linux_386:
 	GOOS=linux GOARCH=386 TAG=main \
 	ARGS="-e BINDING_FILE=$(LINUX_OUTPUT)/386/$(LINUX_BINDING_NAME)" \
-	CMD="make binding" ./cross_build.sh
+	CMD="make binding" ./build.sh
 
 .PHONY: binding_linux_amd64
 binding_linux_amd64:
 	GOOS=linux GOARCH=amd64 TAG=main \
 	ARGS="-e BINDING_FILE=$(LINUX_OUTPUT)/amd64/$(LINUX_BINDING_NAME)" \
-	CMD="make binding" ./cross_build.sh
+	CMD="make binding" ./build.sh
 
 .PHONY: binding_linux_arm64
 binding_linux_arm64:
 	GOOS=linux GOARCH=arm64 TAG=arm \
 	ARGS="-e BINDING_FILE=$(LINUX_OUTPUT)/arm64/$(LINUX_BINDING_NAME)" \
-	CMD="make binding" ./cross_build.sh
+	CMD="make binding" ./build.sh
 
 # Windows
 
@@ -342,13 +342,13 @@ binding_windows: binding_windows_386 binding_windows_amd64
 binding_windows_386:
 	GOOS=windows GOARCH=386 \
 	ARGS="-e BINDING_FILE=$(WINDOWS_OUTPUT)/386/$(WINDOWS_BINDING_NAME)" \
-	TAG=main CMD="make binding" ./cross_build.sh
+	TAG=main CMD="make binding" ./build.sh
 
 .PHONY: binding_windows_amd64
 binding_windows_amd64:
 	GOOS=windows GOARCH=amd64 TAG=main \
 	ARGS="-e BINDING_FILE=$(WINDOWS_OUTPUT)/amd64/$(WINDOWS_BINDING_NAME)" \
-	CMD="make binding" ./cross_build.sh
+	CMD="make binding" ./build.sh
 
 # WebAssembly
 
