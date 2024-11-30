@@ -1,0 +1,7 @@
+name: example
+
+environment:
+  sdk: '^3.4.0'
+
+dependencies:
+  ffi: ^2.1.3

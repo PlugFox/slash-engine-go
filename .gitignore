@@ -190,3 +190,7 @@ lint-reports
 # Output
 output/
 out/
+
+# Dart
+.dart_tool/
+pubspec.lock

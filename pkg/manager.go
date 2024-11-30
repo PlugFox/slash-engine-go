@@ -39,14 +39,23 @@ type WorldManager struct {
 	world *World
 }
 
-// Get the world instance
+// Get the world instance, can be nil
 func (wm *WorldManager) GetWorld() *World {
 	return wm.world
 }
 
 // Initialize the world with options
-func (wm *WorldManager) InitWorld(gravityX, gravityY, boundaryX, boundaryY, tickMS, rtt float64, autoStart bool) {
+func (wm *WorldManager) InitWorld(
+	gravityX float64,
+	gravityY float64,
+	boundaryX float64,
+	boundaryY float64,
+	tickMS float64,
+	rtt float64,
+	autoStart bool,
+) {
 	wm.once.Do(func() {
+		wm.StopWorld() // Stop and clear the world
 		wm.world = &World{
 			Gravity:      Vector{X: gravityX, Y: gravityY},
 			Boundary:     Vector{X: boundaryX, Y: boundaryY},
@@ -64,6 +73,9 @@ func (wm *WorldManager) InitWorld(gravityX, gravityY, boundaryX, boundaryY, tick
 // Add or update objects
 func (wm *WorldManager) UpsertObjects(objects []*Object) {
 	world := wm.GetWorld()
+	if world == nil {
+		return
+	}
 	world.mutex.Lock()
 	defer world.mutex.Unlock()
 	for _, obj := range objects {
@@ -85,6 +97,9 @@ func (wm *WorldManager) UpsertObjects(objects []*Object) {
 // Delete objects by IDs
 func (wm *WorldManager) DeleteObjects(ids []int) {
 	world := wm.GetWorld()
+	if world == nil {
+		return
+	}
 	world.mutex.Lock()
 	defer world.mutex.Unlock()
 	for _, id := range ids {
@@ -95,6 +110,9 @@ func (wm *WorldManager) DeleteObjects(ids []int) {
 // Apply impulse to an object
 func (wm *WorldManager) ApplyImpulse(objectID int, impulseX float64, impulseY float64) {
 	world := wm.GetWorld()
+	if world == nil {
+		return
+	}
 	world.mutex.Lock()
 	defer world.mutex.Unlock()
 	if obj, ok := world.Objects[objectID]; ok {
@@ -106,9 +124,11 @@ func (wm *WorldManager) ApplyImpulse(objectID int, impulseX float64, impulseY fl
 // Get all object positions
 func (wm *WorldManager) GetObjectPositions() []Object {
 	world := wm.GetWorld()
+	if world == nil {
+		return make([]Object, 0)
+	}
 	world.mutex.RLock()
 	defer world.mutex.RUnlock()
-
 	count := len(world.Objects)
 	objects := make([]Object, count)
 	idx := 0
@@ -122,6 +142,9 @@ func (wm *WorldManager) GetObjectPositions() []Object {
 // Stop and clear the world
 func (wm *WorldManager) StopWorld() {
 	world := wm.GetWorld()
+	if world == nil {
+		return
+	}
 	world.mutex.Lock()
 	defer world.mutex.Unlock()
 	if world.running {

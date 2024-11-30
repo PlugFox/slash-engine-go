@@ -23,6 +23,29 @@ import (
 //nolint:gochecknoglobals
 var manager = &pkg.WorldManager{} // Create a global instance of WorldManager for the C API
 
+// Initialize the world with options
+//
+//export InitWorld
+func InitWorld(
+	gravityX C.double,
+	gravityY C.double,
+	boundaryX C.double,
+	boundaryY C.double,
+	tickMS C.double,
+	rtt C.double,
+	autoStart C.int,
+) {
+	manager.InitWorld(
+		float64(gravityX),
+		float64(gravityY),
+		float64(boundaryX),
+		float64(boundaryY),
+		float64(tickMS),
+		float64(rtt),
+		autoStart != 0, // Convert C.int to Go bool
+	)
+}
+
 // Add or update objects
 //
 //export UpsertObjects
@@ -49,7 +72,7 @@ func DeleteObjects(ids *C.int, count C.int) {
 
 	// Convert C.int slice directly to []int without extra copying
 	toDelete := make([]int, count)
-	for i := 0; i < int(count); i++ {
+	for i := range toDelete {
 		toDelete[i] = int(idSlice[i])
 	}
 
