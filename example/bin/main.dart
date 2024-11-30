@@ -92,7 +92,13 @@ typedef _StopWorldC = ffi.Void Function();
 typedef StopWorldDart = void Function();
 
 /// Before running this example, make sure to build the library:
-/// `make binding_darwin_arm64`
+/// `make binding_darwin_arm64` or `make binding_windows_amd64`
+/// and
+/// ```bash
+/// cd example
+/// dart pub get
+/// dart run bin/main.dart
+/// ```
 void main() {
   final lib = openLib();
 
