@@ -48,7 +48,7 @@ typedef struct {
 World* GetWorld();
 void Stop();
 void Run(double tickMS);
-World* CreateWorld(double gravity, Vector boundary);
+void CreateWorld(double gravity, Vector boundary);
 void SetWorld(World* world, double rtt);
 Object* GetObject(int32_t id);
 void UpsertObject(Object* obj);
@@ -97,18 +97,9 @@ func Run(tickMS C.double) {
 }
 
 //export CreateWorld
-func CreateWorld(gravity C.double, boundary C.Vector) *C.World {
+func CreateWorld(gravity C.double, boundary C.Vector) {
 	goBoundary := engine.Vector{X: float64(boundary.X), Y: float64(boundary.Y)}
-	world := singleton.CreateWorld(float64(gravity), goBoundary)
-
-	cWorld := (*C.World)(C.malloc(C.size_t(C.sizeof_World)))
-	cWorld.Gravity = C.double(world.Gravity)
-	cWorld.Boundary = C.Vector{
-		X: C.double(world.Boundary.X),
-		Y: C.double(world.Boundary.Y),
-	}
-	cWorld.ObjectCount = C.int32_t(len(world.Objects))
-	return cWorld
+	singleton.CreateWorld(float64(gravity), goBoundary)
 }
 
 //export SetWorld
@@ -395,7 +386,7 @@ func _freeWorld(cWorld *C.World) {
 		return
 	}
 	// Освобождение массива объектов
-	if cWorld.Objects != nil {
+	if cWorld.Objects != nil && cWorld.ObjectCount > 0 {
 		cObjects := (*[1 << 30]C.Object)(unsafe.Pointer(cWorld.Objects))[:cWorld.ObjectCount:cWorld.ObjectCount]
 		for i := 0; i < int(cWorld.ObjectCount); i++ {
 			_freeObject(&cObjects[i])
