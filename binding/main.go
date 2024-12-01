@@ -4,25 +4,37 @@ package main
 #include <stdint.h>
 #include <stdlib.h>
 
+typedef enum {
+    Other,      // Unknown object type
+    Creature,   // Living entity
+    Projectile, // Moving entity that can hit others
+    Effect,     // Visual effect
+    Terrain,    // Static blocking entity
+    Structure,  // Static structure
+    Item        // Static entity that can be picked up
+} ObjectType;
+
 typedef struct {
     double X;
     double Y;
 } Vector;
 
 typedef struct Impulse {
-    Vector Direction;
-    double Damping;
-    struct Impulse* Next;
+    Vector Direction;    // Direction and magnitude of the impulse
+    double Damping;      // Damping factor
+    struct Impulse* Next; // Pointer to the next impulse in the list
 } Impulse;
 
 typedef struct {
-    int32_t ID;
-    Vector Size;
-    Vector Velocity;
-    Vector Position;
-    double GravityFactor;
-    Impulse* Impulses;
-    uint8_t Particle;
+    int32_t ID;          // Object ID
+    ObjectType Type;     // Type of the object
+    uint8_t Client;      // Created by client (1) or server (0)
+    Vector Size;         // Current object size (width, height)
+    Vector Velocity;     // Current velocity (x, y)
+    Vector Position;     // Current position (x, y)
+    Vector Anchor;       // Anchor position relative to the object's center
+    double GravityFactor; // Gravity factor
+    Impulse* Impulses;   // Linked list of active impulses
 } Object;
 
 typedef struct {
@@ -62,71 +74,8 @@ func GetWorld() *C.World {
 		return nil
 	}
 
-	// Создаем C-структуру World
-	cWorld := (*C.World)(C.malloc(C.size_t(C.sizeof_World)))
-
-	// Заполняем поля World
-	cWorld.Gravity = C.double(world.Gravity)
-	cWorld.Boundary = C.Vector{
-		X: C.double(world.Boundary.X),
-		Y: C.double(world.Boundary.Y),
-	}
-
-	// Преобразуем карту Objects в массив объектов
-	objectCount := len(world.Objects)
-	cWorld.ObjectCount = C.int32_t(objectCount)
-
-	if objectCount > 0 {
-		cWorld.Objects = (*C.Object)(C.malloc(C.size_t(objectCount) * C.size_t(C.sizeof_Object)))
-
-		// Получаем массив C-объектов
-		cObjects := (*[1 << 30]C.Object)(unsafe.Pointer(cWorld.Objects))[:objectCount:objectCount]
-
-		i := 0
-		for _, obj := range world.Objects {
-			// Конвертируем Go-объект в C-объект
-			cObjects[i] = C.Object{
-				ID:            C.int32_t(obj.ID),
-				Size:          C.Vector{X: C.double(obj.Size.X), Y: C.double(obj.Size.Y)},
-				Velocity:      C.Vector{X: C.double(obj.Velocity.X), Y: C.double(obj.Velocity.Y)},
-				Position:      C.Vector{X: C.double(obj.Position.X), Y: C.double(obj.Position.Y)},
-				GravityFactor: C.double(obj.GravityFactor),
-				Particle:      C.uint8_t(0),
-			}
-
-			// Если это частица, устанавливаем флаг
-			if obj.Particle {
-				cObjects[i].Particle = C.uint8_t(1)
-			}
-
-			// Преобразуем импульсы
-			cObjects[i].Impulses = convertImpulsesToC(obj.Impulses)
-
-			i++
-		}
-	} else {
-		cWorld.Objects = nil
-	}
-
-	return cWorld
-}
-
-// Вспомогательная функция для преобразования связного списка импульсов
-func convertImpulsesToC(goImpulse *engine.Impulse) *C.Impulse {
-	if goImpulse == nil {
-		return nil
-	}
-
-	// Рекурсивное преобразование импульсов
-	cImpulse := (*C.Impulse)(C.malloc(C.size_t(C.sizeof_Impulse)))
-	cImpulse.Direction = C.Vector{
-		X: C.double(goImpulse.Direction.X),
-		Y: C.double(goImpulse.Direction.Y),
-	}
-	cImpulse.Damping = C.double(goImpulse.Damping)
-	cImpulse.Next = convertImpulsesToC(goImpulse.Next)
-
-	return cImpulse
+	// Преобразуем Go-мир в C-мир
+	return _convertWorldToC(world)
 }
 
 //export StopEngine
@@ -157,64 +106,12 @@ func CreateWorld(gravity C.double, boundary C.Vector) *C.World {
 //export SetWorld
 func SetWorld(world *C.World, rtt C.double) {
 	goRTT := float64(rtt)
-
 	if world == nil {
 		singleton.SetWorld(nil, goRTT)
 		return
 	}
-
-	// Преобразуем границы мира
-	goBoundary := engine.Vector{
-		X: float64(world.Boundary.X),
-		Y: float64(world.Boundary.Y),
-	}
-
-	// Создаём новый объект мира
-	goWorld := &engine.World{
-		Gravity:  float64(world.Gravity),
-		Boundary: goBoundary,
-		Objects:  make(map[int]*engine.Object),
-	}
-
-	// Преобразуем C-объекты в Go-объекты
-	if world.Objects != nil && world.ObjectCount > 0 {
-		cObjects := (*[1 << 30]C.Object)(unsafe.Pointer(world.Objects))[:world.ObjectCount:world.ObjectCount]
-		for _, cObj := range cObjects {
-			// Преобразуем каждый C-объект
-			goObj := &engine.Object{
-				ID:            int(cObj.ID),
-				Size:          engine.Vector{X: float64(cObj.Size.X), Y: float64(cObj.Size.Y)},
-				Velocity:      engine.Vector{X: float64(cObj.Velocity.X), Y: float64(cObj.Velocity.Y)},
-				Position:      engine.Vector{X: float64(cObj.Position.X), Y: float64(cObj.Position.Y)},
-				GravityFactor: float64(cObj.GravityFactor),
-				Particle:      cObj.Particle != 0,
-				Impulses:      convertImpulsesToGo(cObj.Impulses),
-			}
-			goWorld.Objects[goObj.ID] = goObj
-		}
-	}
-
-	// Устанавливаем преобразованный мир в движок
-	singleton.SetWorld(goWorld, goRTT)
-}
-
-// Вспомогательная функция для преобразования C-списка импульсов в Go-список
-func convertImpulsesToGo(cImpulse *C.Impulse) *engine.Impulse {
-	if cImpulse == nil {
-		return nil
-	}
-
-	// Рекурсивное преобразование импульсов
-	goImpulse := &engine.Impulse{
-		Direction: engine.Vector{
-			X: float64(cImpulse.Direction.X),
-			Y: float64(cImpulse.Direction.Y),
-		},
-		Damping: float64(cImpulse.Damping),
-		Next:    convertImpulsesToGo(cImpulse.Next),
-	}
-
-	return goImpulse
+	goWorld := _convertWorldToGo(world) // Преобразуем C-мир в Go-мир
+	singleton.SetWorld(goWorld, goRTT)  // Устанавливаем преобразованный мир в движок
 }
 
 //export AddImpulse
@@ -243,6 +140,180 @@ func RemoveObjects(ids *C.int32_t, count C.int32_t) {
 		goIDs[i] = int(id)
 	}
 	singleton.RemoveObjects(goIDs)
+}
+
+// Helper function to convert bool to uint8
+func _boolToUint8(b bool) C.uint8_t {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+// Helper function to convert uint8 to bool
+func _uint8ToBool(b C.uint8_t) bool {
+	return b != 0
+}
+
+// Вспомогательная функция для преобразования связного списка импульсов
+func _convertImpulsesToC(goImpulse *engine.Impulse) *C.Impulse {
+	if goImpulse == nil {
+		return nil
+	}
+
+	// Рекурсивное преобразование импульсов
+	cImpulse := (*C.Impulse)(C.malloc(C.size_t(C.sizeof_Impulse)))
+	cImpulse.Direction = C.Vector{
+		X: C.double(goImpulse.Direction.X),
+		Y: C.double(goImpulse.Direction.Y),
+	}
+	cImpulse.Damping = C.double(goImpulse.Damping)
+	cImpulse.Next = _convertImpulsesToC(goImpulse.Next)
+
+	return cImpulse
+}
+
+// Вспомогательная функция для преобразования C-списка импульсов в Go-список
+func _convertImpulsesToGo(cImpulse *C.Impulse) *engine.Impulse {
+	if cImpulse == nil {
+		return nil
+	}
+
+	// Рекурсивное преобразование импульсов
+	goImpulse := &engine.Impulse{
+		Direction: engine.Vector{
+			X: float64(cImpulse.Direction.X),
+			Y: float64(cImpulse.Direction.Y),
+		},
+		Damping: float64(cImpulse.Damping),
+		Next:    _convertImpulsesToGo(cImpulse.Next),
+	}
+
+	return goImpulse
+}
+
+// Converts a Go Object to a C Object
+func _convertObjectToC(obj *engine.Object) *C.Object {
+	if obj == nil {
+		return nil
+	}
+
+	cObj := (*C.Object)(C.malloc(C.size_t(C.sizeof_Object)))
+
+	// Convert basic fields
+	cObj.ID = C.int32_t(obj.ID)
+	cObj.Type = C.ObjectType(obj.Type)
+	cObj.Client = C.uint8_t(_boolToUint8(obj.Client))
+	cObj.Size = C.Vector{
+		X: C.double(obj.Size.X),
+		Y: C.double(obj.Size.Y),
+	}
+	cObj.Velocity = C.Vector{
+		X: C.double(obj.Velocity.X),
+		Y: C.double(obj.Velocity.Y),
+	}
+	cObj.Position = C.Vector{
+		X: C.double(obj.Position.X),
+		Y: C.double(obj.Position.Y),
+	}
+	cObj.Anchor = C.Vector{
+		X: C.double(obj.Anchor.X),
+		Y: C.double(obj.Anchor.Y),
+	}
+	cObj.GravityFactor = C.double(obj.GravityFactor)
+
+	// Convert impulses
+	cObj.Impulses = _convertImpulsesToC(obj.Impulses)
+
+	return cObj
+}
+
+// Converts a C Object to a Go Object
+func _convertObjectToGo(cObj *C.Object) *engine.Object {
+	if cObj == nil {
+		return nil
+	}
+
+	obj := &engine.Object{
+		ID:            int(cObj.ID),
+		Type:          engine.ObjectType(cObj.Type),
+		Client:        _uint8ToBool(cObj.Client),
+		Size:          engine.Vector{X: float64(cObj.Size.X), Y: float64(cObj.Size.Y)},
+		Velocity:      engine.Vector{X: float64(cObj.Velocity.X), Y: float64(cObj.Velocity.Y)},
+		Position:      engine.Vector{X: float64(cObj.Position.X), Y: float64(cObj.Position.Y)},
+		Anchor:        engine.Vector{X: float64(cObj.Anchor.X), Y: float64(cObj.Anchor.Y)},
+		GravityFactor: float64(cObj.GravityFactor),
+	}
+
+	// Convert impulses
+	obj.Impulses = _convertImpulsesToGo(cObj.Impulses)
+
+	return obj
+}
+
+func _convertWorldToC(world *engine.World) *C.World {
+	if world == nil {
+		return nil
+	}
+
+	// Allocate memory for C.World
+	cWorld := (*C.World)(C.malloc(C.size_t(C.sizeof_World)))
+
+	// Convert fields
+	cWorld.Gravity = C.double(world.Gravity)
+	cWorld.Boundary = C.Vector{
+		X: C.double(world.Boundary.X),
+		Y: C.double(world.Boundary.Y),
+	}
+
+	// Convert map of objects to C array
+	objectCount := len(world.Objects)
+	cWorld.ObjectCount = C.int32_t(objectCount)
+
+	if objectCount > 0 {
+		cWorld.Objects = (*C.Object)(C.malloc(C.size_t(objectCount) * C.size_t(C.sizeof_Object)))
+
+		// Convert Go objects to C objects
+		cObjects := (*[1 << 30]C.Object)(unsafe.Pointer(cWorld.Objects))[:objectCount:objectCount]
+
+		i := 0
+		for _, obj := range world.Objects {
+			cObjects[i] = *_convertObjectToC(obj)
+			i++
+		}
+	} else {
+		cWorld.Objects = nil
+	}
+
+	return cWorld
+}
+
+func _convertWorldToGo(cWorld *C.World) *engine.World {
+	if cWorld == nil {
+		return nil
+	}
+
+	// Create a new Go World
+	world := &engine.World{
+		Gravity:  float64(cWorld.Gravity),
+		Boundary: engine.Vector{X: float64(cWorld.Boundary.X), Y: float64(cWorld.Boundary.Y)},
+		Objects:  make(map[int]*engine.Object),
+	}
+
+	// Convert C array of objects to Go map
+	objectCount := int(cWorld.ObjectCount)
+	if objectCount > 0 && cWorld.Objects != nil {
+		cObjects := (*[1 << 30]C.Object)(unsafe.Pointer(cWorld.Objects))[:objectCount:objectCount]
+
+		for i := 0; i < objectCount; i++ {
+			obj := _convertObjectToGo(&cObjects[i])
+			if obj != nil {
+				world.Objects[obj.ID] = obj
+			}
+		}
+	}
+
+	return world
 }
 
 func main() {}
