@@ -45,12 +45,12 @@ typedef struct {
 } World;
 
 // Forward declarations for exporting
-World* GetWorld();
-void Stop();
-void Run(double tickMS);
 void CreateWorld(double gravity, Vector boundary);
 void SetWorld(World* world, double rtt);
-Object* GetObject(int32_t id);
+void Run(double tickMS);
+void Stop();
+World* GetWorldPtr();
+Object* GetObjectPtr(int32_t id);
 void UpsertObject(Object* obj);
 void UpsertObjects(Object* objects, int32_t count);
 void AddImpulse(int32_t id, Vector direction, double damping);
@@ -59,9 +59,9 @@ void SetPosition(int32_t id, Vector position);
 void SetAnchor(int32_t id, Vector anchor);
 void RemoveObject(int32_t id);
 void RemoveObjects(int32_t* ids, int32_t count);
-void FreeImpulse(Impulse* impulse);
-void FreeObject(Object* obj);
-void FreeWorld(World* world);
+void FreeImpulsePtr(Impulse* impulse);
+void FreeObjectPtr(Object* obj);
+void FreeWorldPtr(World* world);
 */
 import "C"
 
@@ -73,28 +73,6 @@ import (
 
 //nolint:gochecknoglobals
 var singleton = &engine.Engine{} // Create a global instance of Engine for the C API
-
-//export GetWorld
-func GetWorld() *C.World {
-	// Получаем указатель на текущий мир
-	world := singleton.GetWorld()
-	if world == nil {
-		return nil
-	}
-
-	// Преобразуем Go-мир в C-мир
-	return _convertWorldToC(world)
-}
-
-//export Stop
-func Stop() {
-	singleton.Stop()
-}
-
-//export Run
-func Run(tickMS C.double) {
-	singleton.Run(float64(tickMS))
-}
 
 //export CreateWorld
 func CreateWorld(gravity C.double, boundary C.Vector) {
@@ -113,8 +91,30 @@ func SetWorld(world *C.World, rtt C.double) {
 	singleton.SetWorld(goWorld, goRTT)  // Устанавливаем преобразованный мир в движок
 }
 
-//export GetObject
-func GetObject(id C.int32_t) *C.Object {
+//export Run
+func Run(tickMS C.double) {
+	singleton.Run(float64(tickMS))
+}
+
+//export Stop
+func Stop() {
+	singleton.Stop()
+}
+
+//export GetWorldPtr
+func GetWorldPtr() *C.World {
+	// Получаем указатель на текущий мир
+	world := singleton.GetWorld()
+	if world == nil {
+		return nil
+	}
+
+	// Преобразуем Go-мир в C-мир
+	return _convertWorldToC(world)
+}
+
+//export GetObjectPtr
+func GetObjectPtr(id C.int32_t) *C.Object {
 	goObj := singleton.GetObject(int(id))
 	return _convertObjectToC(goObj)
 }
@@ -174,18 +174,18 @@ func RemoveObjects(ids *C.int32_t, count C.int32_t) {
 	singleton.RemoveObjects(goIDs)
 }
 
-//export FreeImpulse
-func FreeImpulse(cImpulse *C.Impulse) {
+//export FreeImpulsePtr
+func FreeImpulsePtr(cImpulse *C.Impulse) {
 	_freeImpulse(cImpulse)
 }
 
-//export FreeObject
-func FreeObject(cObj *C.Object) {
+//export FreeObjectPtr
+func FreeObjectPtr(cObj *C.Object) {
 	_freeObject(cObj)
 }
 
-//export FreeWorld
-func FreeWorld(cWorld *C.World) {
+//export FreeWorldPtr
+func FreeWorldPtr(cWorld *C.World) {
 	_freeWorld(cWorld)
 }
 

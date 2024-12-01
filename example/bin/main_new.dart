@@ -67,21 +67,43 @@ typedef _CreateWorldDart = void Function(
   ffi.Pointer<_VectorStruct> boundary,
 );
 
-// GetWorld function
-typedef _GetWorldC = ffi.Pointer<_WorldStruct> Function();
-typedef _GetWorldDart = ffi.Pointer<_WorldStruct> Function();
+// SetWorld function
+typedef _SetWorldC = ffi.Void Function(
+  ffi.Pointer<_WorldStruct> world,
+  ffi.Double rtt,
+);
+typedef _SetWorldDart = void Function(
+  ffi.Pointer<_WorldStruct> world,
+  double rtt,
+);
 
-// FreeWorld function
-typedef _FreeWorldC = ffi.Void Function(
-  ffi.Pointer<_WorldStruct>,
-);
-typedef _FreeWorldDart = void Function(
-  ffi.Pointer<_WorldStruct>,
-);
+// Run function
+typedef _RunC = ffi.Void Function(ffi.Double tickMS);
+typedef _RunDart = void Function(double tickMS);
 
 // Stop function
 typedef _StopC = ffi.Void Function();
 typedef _StopDart = void Function();
+
+// GetWorldPtr function
+typedef _GetWorldPtrC = ffi.Pointer<_WorldStruct> Function();
+typedef _GetWorldPtrDart = ffi.Pointer<_WorldStruct> Function();
+
+// _GetObjectPtr function
+typedef _GetObjectPtrC = ffi.Pointer<_ObjectStruct> Function(ffi.Int32 id);
+typedef _GetObjectPtrDart = ffi.Pointer<_ObjectStruct> Function(int id);
+
+// FreeObjectPtr function
+typedef _FreeObjectPtrC = ffi.Void Function(ffi.Pointer<_ObjectStruct>);
+typedef _FreeObjectPtrDart = void Function(ffi.Pointer<_ObjectStruct>);
+
+// FreeWorldPtr function
+typedef _FreeWorldPtrC = ffi.Void Function(
+  ffi.Pointer<_WorldStruct>,
+);
+typedef _FreeWorldPtrDart = void Function(
+  ffi.Pointer<_WorldStruct>,
+);
 
 // Utility function to open the shared library
 ffi.DynamicLibrary _openEngineLib() {
@@ -109,50 +131,82 @@ class SlashEngine {
   factory SlashEngine() => _instance ??= SlashEngine._(_openEngineLib());
   static SlashEngine? _instance;
   SlashEngine._(ffi.DynamicLibrary lib)
-      : _getWorldC = lib.lookupFunction<_GetWorldC, _GetWorldDart>('GetWorld'),
-        _freeWorldC =
-            lib.lookupFunction<_FreeWorldC, _FreeWorldDart>('FreeWorld'),
-        _createWorldC =
+      : _createWorldDart =
             lib.lookupFunction<_CreateWorldC, _CreateWorldDart>('CreateWorld'),
-        _stopC = lib.lookupFunction<_StopC, _StopDart>('Stop');
+        _setWorldDart =
+            lib.lookupFunction<_SetWorldC, _SetWorldDart>('SetWorld'),
+        _runDart = lib.lookupFunction<_RunC, _RunDart>('Run'),
+        _stopDart = lib.lookupFunction<_StopC, _StopDart>('Stop'),
+        _getWorldPtrDart =
+            lib.lookupFunction<_GetWorldPtrC, _GetWorldPtrDart>('GetWorldPtr'),
+        _getObjectPtrDart = lib
+            .lookupFunction<_GetObjectPtrC, _GetObjectPtrDart>('GetObjectPtr'),
+        _freeObjectPtrDart =
+            lib.lookupFunction<_FreeObjectPtrC, _FreeObjectPtrDart>(
+                'FreeObjectPtr'),
+        _freeWorldPtrDart = lib
+            .lookupFunction<_FreeWorldPtrC, _FreeWorldPtrDart>('FreeWorldPtr');
 
-  final _CreateWorldDart _createWorldC;
-  final _GetWorldDart _getWorldC;
-  final _FreeWorldDart _freeWorldC;
-  final _StopDart _stopC;
+  final _CreateWorldDart _createWorldDart;
+  final _SetWorldDart _setWorldDart;
+  final _RunDart _runDart;
+  final _GetWorldPtrDart _getWorldPtrDart;
+  final _GetObjectPtrDart _getObjectPtrDart;
+  final _FreeObjectPtrDart _freeObjectPtrDart;
+  final _FreeWorldPtrDart _freeWorldPtrDart;
+  final _StopDart _stopDart;
 
   /// Create a new world with the given gravity, boundary
-  void createWorld(
-      {required double x, required double y, required double gravity}) {
+  void createWorld({
+    required double x,
+    required double y,
+    required double gravity,
+  }) {
     final boundary = ffi.calloc<_VectorStruct>();
     boundary.ref
       ..X = x
       ..Y = y;
-    _createWorldC(gravity, boundary);
+    _createWorldDart(gravity, boundary);
     ffi.calloc.free(boundary);
   }
 
+  /// Set the world with the given round-trip time
+  void setWorld(ffi.Pointer<_WorldStruct> world, double rtt) {
+    _setWorldDart(world, rtt);
+  }
+
+  /// Run the engine with the given tick interval
+  void run(double tickMS) {
+    _runDart(tickMS);
+  }
+
   /// Get the current world
-  // ignore: unused_element
-  ffi.Pointer<_WorldStruct> _getWorld() {
-    final result = _getWorldC();
-    // _freeWorld(result);
-    return result;
+  ffi.Pointer<_WorldStruct> getWorldPtr() {
+    return _getWorldPtrDart();
+  }
+
+  /// Get the current object
+  ffi.Pointer<_ObjectStruct> getObjectPtr(int id) {
+    return _getObjectPtrDart(id);
+  }
+
+  /// Free the given object
+  void freeObjectPtr(ffi.Pointer<_ObjectStruct> object) {
+    _freeObjectPtrDart(object);
   }
 
   /// Free the given world
-  // ignore: unused_element
-  void _freeWorld(ffi.Pointer<_WorldStruct> world) {
-    _freeWorldC(world);
+  void freeWorldPtr(ffi.Pointer<_WorldStruct> world) {
+    _freeWorldPtrDart(world);
   }
 
   /// Stop the engine
   void stop() {
-    _stopC();
+    _stopDart();
   }
 }
 
-void main() {
+void main() async {
   final engine = SlashEngine();
 
   engine.createWorld(
@@ -161,16 +215,27 @@ void main() {
     y: 500.0,
   );
 
-  final world = engine._getWorld();
+  var world = engine.getWorldPtr();
 
   if (world.address != 0) {
     print('World created: Gravity = ${world.ref.Gravity}, '
         'Boundary = (${world.ref.Boundary.X}, ${world.ref.Boundary.Y}), '
         'Objects = ${world.ref.ObjectCount}');
     // Free the allocated world after use
-    engine._freeWorld(world);
+    engine.freeWorldPtr(world);
     print('World freed');
   }
+
+  // Run the engine
+  engine.run(16.0);
+
+  await Future.delayed(const Duration(seconds: 1));
+
+  world = engine.getWorldPtr();
+  engine.setWorld(world, 24.0);
+  engine.freeWorldPtr(world);
+
+  await Future.delayed(const Duration(seconds: 1));
 
   // Stop the engine
   engine.stop();
