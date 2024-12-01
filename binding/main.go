@@ -46,13 +46,18 @@ typedef struct {
 
 // Forward declarations for exporting
 World* GetWorld();
-void StopEngine();
-void RunEngine(double tickMS);
+void Stop();
+void Run(double tickMS);
 World* CreateWorld(double gravity, Vector boundary);
 void SetWorld(World* world, double rtt);
+Object* GetObject(int32_t id);
+void UpsertObject(Object* obj);
+void UpsertObjects(Object* objects, int32_t count);
 void AddImpulse(int32_t id, Vector direction, double damping);
 void SetVelocity(int32_t id, Vector velocity);
 void SetPosition(int32_t id, Vector position);
+void SetAnchor(int32_t id, Vector anchor);
+void RemoveObject(int32_t id);
 void RemoveObjects(int32_t* ids, int32_t count);
 */
 import "C"
@@ -78,13 +83,13 @@ func GetWorld() *C.World {
 	return _convertWorldToC(world)
 }
 
-//export StopEngine
-func StopEngine() {
+//export Stop
+func Stop() {
 	singleton.Stop()
 }
 
-//export RunEngine
-func RunEngine(tickMS C.double) {
+//export Run
+func Run(tickMS C.double) {
 	singleton.Run(float64(tickMS))
 }
 
@@ -114,6 +119,28 @@ func SetWorld(world *C.World, rtt C.double) {
 	singleton.SetWorld(goWorld, goRTT)  // Устанавливаем преобразованный мир в движок
 }
 
+//export GetObject
+func GetObject(id C.int32_t) *C.Object {
+	goObj := singleton.GetObject(int(id))
+	return _convertObjectToC(goObj)
+}
+
+//export UpsertObject
+func UpsertObject(obj *C.Object) {
+	goObj := _convertObjectToGo(obj)
+	singleton.UpsertObject(goObj)
+}
+
+//export UpsertObjects
+func UpsertObjects(objects *C.Object, count C.int32_t) {
+	goObjects := make([]*engine.Object, count)
+	objSlice := (*[1 << 30]C.Object)(unsafe.Pointer(objects))[:count:count]
+	for i, obj := range objSlice {
+		goObjects[i] = _convertObjectToGo(&obj)
+	}
+	singleton.UpsertObjects(goObjects)
+}
+
 //export AddImpulse
 func AddImpulse(id C.int32_t, direction C.Vector, damping C.double) {
 	goDirection := engine.Vector{X: float64(direction.X), Y: float64(direction.Y)}
@@ -130,6 +157,17 @@ func SetVelocity(id C.int32_t, velocity C.Vector) {
 func SetPosition(id C.int32_t, position C.Vector) {
 	goPosition := engine.Vector{X: float64(position.X), Y: float64(position.Y)}
 	singleton.SetPosition(int(id), goPosition)
+}
+
+//export SetAnchor
+func SetAnchor(id C.int32_t, anchor C.Vector) {
+	goAnchor := engine.Vector{X: float64(anchor.X), Y: float64(anchor.Y)}
+	singleton.SetAnchor(int(id), goAnchor)
+}
+
+//export RemoveObject
+func RemoveObject(id C.int32_t) {
+	singleton.RemoveObject(int(id))
 }
 
 //export RemoveObjects

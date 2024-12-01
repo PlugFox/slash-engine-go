@@ -24,13 +24,6 @@ func (engine *Engine) GetWorld() *World {
 	return engine.getWorld()
 }
 
-// Get an object or particle by id
-func (engine *Engine) GetObject(id int) *Object {
-	engine.mutex.RLock()
-	defer engine.mutex.RUnlock()
-	return engine.getObject(id)
-}
-
 // Stop and clear the world
 func (engine *Engine) Stop() {
 	engine.mutex.Lock()
@@ -118,9 +111,16 @@ func (engine *Engine) SetWorld(world *World, rtt float64) {
 	defer engine.mutex.Unlock()
 	engine.world = world
 	if rtt > 0 {
-		engine.update(rtt / 2) // Extrapolate object positions based on half RTT
+		engine.update(rtt) // Extrapolate object positions based on RTT
 	}
 	engine.lastUpdate = time.Now() // Set last update time
+}
+
+// Get an object or particle by id
+func (engine *Engine) GetObject(id int) *Object {
+	engine.mutex.RLock()
+	defer engine.mutex.RUnlock()
+	return engine.getObject(id)
 }
 
 // Upsert an object to the world
@@ -187,6 +187,16 @@ func (engine *Engine) SetAnchor(id int, anchor Vector) {
 	obj := engine.getObject(id)
 	if obj != nil {
 		obj.Anchor = anchor
+	}
+}
+
+// Remove object by ID
+func (engine *Engine) RemoveObject(id int) {
+	engine.mutex.Lock()
+	defer engine.mutex.Unlock()
+	world := engine.getWorld()
+	if world != nil {
+		delete(world.Objects, id)
 	}
 }
 
