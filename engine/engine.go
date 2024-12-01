@@ -79,7 +79,6 @@ type Engine struct {
 	updateSignal chan struct{} // Update signal
 	updateTicker *time.Ticker  // Update ticker
 	lastUpdate   time.Time     // Last update time
-	rtt          float64       // Round-trip time (RTT) in seconds (for extrapolation), ping-pong time between client and server
 }
 
 // Get the world instance, can be nil
@@ -152,7 +151,14 @@ func (engine *Engine) Run(tickMS float64) {
 		for {
 			select {
 			case <-engine.updateSignal:
-				engine.update() // Обновляем мир
+				func() {
+					engine.mutex.Lock()
+					defer engine.mutex.Unlock()
+					now := time.Now()                               // Current time
+					elapsed := now.Sub(engine.lastUpdate).Seconds() // Elapsed time since last update
+					engine.update(elapsed)                          // Update the world
+					engine.lastUpdate = now                         // Set last update time
+				}()
 			case <-engine.stopChannel:
 				return // Завершаем выполнение
 			}
@@ -174,18 +180,16 @@ func (engine *Engine) CreateWorld(gravity float64, boundary Vector) *World {
 }
 
 // Set the world instance
-func (engine *Engine) SetWorld(world *World) {
+// RTT (round-trip time) is the ping-pong time between client and server
+// RTT is used for extrapolation to predict object positions
+func (engine *Engine) SetWorld(world *World, rtt float64) {
 	engine.mutex.Lock()
 	defer engine.mutex.Unlock()
 	engine.world = world
-}
-
-// Set the round-trip time (RTT) in seconds (for extrapolation)
-// RTT is the ping-pong time between client and server
-func (engine *Engine) SetRTT(rtt float64) {
-	engine.mutex.Lock()
-	defer engine.mutex.Unlock()
-	engine.rtt = rtt
+	if rtt > 0 {
+		engine.update(rtt / 2) // Extrapolate object positions based on half RTT
+	}
+	engine.lastUpdate = time.Now() // Set last update time
 }
 
 // Add an impulse to an object
@@ -305,20 +309,14 @@ func (obj *Object) applyImpulses(elapsed float64) {
 }
 
 // Calculate physics and update object positions
-func (engine *Engine) update() {
-	engine.mutex.Lock()
-	defer engine.mutex.Unlock()
+func (engine *Engine) update(elapsed float64) {
+	if elapsed <= 0 {
+		return // Skip if no time has passed
+	}
+
 	world := engine.world
 	if world == nil {
 		return
-	}
-
-	now := time.Now()                               // Current time
-	elapsed := now.Sub(engine.lastUpdate).Seconds() // Elapsed time since last update
-	engine.lastUpdate = now                         // Set last update time
-
-	if elapsed <= 0 {
-		return // Skip if no time has passed
 	}
 
 	// Update object positions

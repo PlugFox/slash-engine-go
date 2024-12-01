@@ -81,12 +81,14 @@ typedef CreateWorldDart = ffi.Pointer<WorldStruct> Function(
 );
 
 // SetWorld function
-typedef _SetWorldC = ffi.Void Function(ffi.Pointer<WorldStruct> world);
-typedef SetWorldDart = void Function(ffi.Pointer<WorldStruct> world);
-
-// SetRTT function
-typedef _SetRTTC = ffi.Void Function(ffi.Double rtt);
-typedef SetRTTDart = void Function(double rtt);
+typedef _SetWorldC = ffi.Void Function(
+  ffi.Pointer<WorldStruct> world,
+  ffi.Double rtt,
+);
+typedef SetWorldDart = void Function(
+  ffi.Pointer<WorldStruct> world,
+  double rtt,
+);
 
 // AddImpulse function
 typedef _AddImpulseC = ffi.Void Function(
@@ -154,8 +156,6 @@ void main() {
 
   final setWorld = lib.lookupFunction<_SetWorldC, SetWorldDart>('SetWorld');
 
-  final setRTT = lib.lookupFunction<_SetRTTC, SetRTTDart>('SetRTT');
-
   final addImpulse =
       lib.lookupFunction<_AddImpulseC, AddImpulseDart>('AddImpulse');
 
@@ -177,8 +177,7 @@ void main() {
     boundary.ref.Y = 480.0;
     final world = createWorld(9.8, boundary);
     ffi.calloc.free(boundary);
-
-    setRTT(0.016); // Set RTT to 16ms
+    print('World created with gravity 9.8 and boundary 6000x480');
 
     world.ref.ObjectCount = 5;
     world.ref.Objects = ffi.calloc<ObjectStruct>(5);
@@ -195,58 +194,77 @@ void main() {
       object.ref.Particle = 0;
       object.ref.Impulses = ffi.nullptr;
     }
-    setWorld(world);
+    setWorld(world, 60); // Set world with RTT 60ms
+    print('World objects upserted with initial positions and velocities');
   }
 
   {
     // Get world info
     final world = getWorld();
     print(
-      'World created with gravity: ${world.ref.Gravity}, '
+      'Received world with gravity: ${world.ref.Gravity}, '
       'boundary: ${world.ref.Boundary.X}x${world.ref.Boundary.Y}, '
       '${world.ref.ObjectCount} objects',
     );
   }
 
-  // Add impulse
-  final direction = ffi.calloc<VectorStruct>();
-  direction.ref.X = 10.0;
-  direction.ref.Y = 20.0;
-  addImpulse(1, direction, 0.95);
-  ffi.calloc.free(direction);
+  {
+    // Add impulse
+    final direction = ffi.calloc<VectorStruct>();
+    direction.ref.X = 10.0;
+    direction.ref.Y = 20.0;
+    addImpulse(1, direction, 0.95);
+    ffi.calloc.free(direction);
+    print('Impulse added to object 1 with direction 10x20 and damping 0.95');
+  }
 
-  // Set velocity
-  final velocity = ffi.calloc<VectorStruct>();
-  velocity.ref.X = 5.0;
-  velocity.ref.Y = 0.0;
-  setVelocity(2, velocity);
-  ffi.calloc.free(velocity);
+  {
+    // Set velocity
+    final velocity = ffi.calloc<VectorStruct>();
+    velocity.ref.X = 5.0;
+    velocity.ref.Y = 0.0;
+    setVelocity(2, velocity);
+    ffi.calloc.free(velocity);
+    print('Object 2 velocity set to 5x0');
+  }
 
-  // Delete objects
-  final ids = ffi.calloc<ffi.Int32>(2);
-  ids[0] = 3;
-  ids[1] = 4;
-  removeObjects(ids, 2);
+  {
+    // Delete objects
+    final ids = ffi.calloc<ffi.Int32>(2);
+    ids[0] = 3;
+    ids[1] = 4;
+    removeObjects(ids, 2);
+    print('Objects 3 and 4 removed');
+  }
 
-  runEngine(16.67); // Run engine for 16ms
+  {
+    // Run engine for 16ms (60 FPS)
+    runEngine(16.67);
+    print('Engine running with 16.67ms (60 FPS) tick interval');
+  }
 
   Timer(const Duration(milliseconds: 200), () {
-    final world = getWorld();
-
-    final buffer = StringBuffer()
-      ..writeln('Objects count: ${world.ref.ObjectCount}');
-    for (var i = 0; i < world.ref.ObjectCount; i++) {
-      final object = (world.ref.Objects + i).ref;
-      buffer.writeln(
-        'Object ${object.ID}: '
-        'position: ${object.Position.X}x${object.Position.Y}, '
-        'velocity: ${object.Velocity.X}x${object.Velocity.Y}',
-      );
+    {
+      // Get world info
+      final world = getWorld();
+      final buffer = StringBuffer()
+        ..writeln('Objects count: ${world.ref.ObjectCount}');
+      for (var i = 0; i < world.ref.ObjectCount; i++) {
+        final object = (world.ref.Objects + i).ref;
+        buffer.writeln(
+          'Object #${object.ID}: '
+          'position: ${object.Position.X}x${object.Position.Y}, '
+          'velocity: ${object.Velocity.X}x${object.Velocity.Y}',
+        );
+      }
+      print(buffer.toString());
     }
-    print(buffer.toString());
 
-    // Stop engine
-    stopEngine();
+    {
+      // Stop engine
+      stopEngine();
+      print('Engine stopped');
+    }
   });
 }
 

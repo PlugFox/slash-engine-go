@@ -37,8 +37,7 @@ World* GetWorld();
 void StopEngine();
 void RunEngine(double tickMS);
 World* CreateWorld(double gravity, Vector boundary);
-void SetWorld(World* world);
-void SetRTT(double rtt);
+void SetWorld(World* world, double rtt);
 void AddImpulse(int32_t id, Vector direction, double damping);
 void SetVelocity(int32_t id, Vector velocity);
 void SetPosition(int32_t id, Vector position);
@@ -156,9 +155,11 @@ func CreateWorld(gravity C.double, boundary C.Vector) *C.World {
 }
 
 //export SetWorld
-func SetWorld(world *C.World) {
+func SetWorld(world *C.World, rtt C.double) {
+	goRTT := float64(rtt)
+
 	if world == nil {
-		singleton.SetWorld(nil)
+		singleton.SetWorld(nil, goRTT)
 		return
 	}
 
@@ -194,7 +195,7 @@ func SetWorld(world *C.World) {
 	}
 
 	// Устанавливаем преобразованный мир в движок
-	singleton.SetWorld(goWorld)
+	singleton.SetWorld(goWorld, goRTT)
 }
 
 // Вспомогательная функция для преобразования C-списка импульсов в Go-список
@@ -214,11 +215,6 @@ func convertImpulsesToGo(cImpulse *C.Impulse) *engine.Impulse {
 	}
 
 	return goImpulse
-}
-
-//export SetRTT
-func SetRTT(rtt C.double) {
-	singleton.SetRTT(float64(rtt))
 }
 
 //export AddImpulse
