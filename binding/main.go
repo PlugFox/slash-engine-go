@@ -59,6 +59,9 @@ void SetPosition(int32_t id, Vector position);
 void SetAnchor(int32_t id, Vector anchor);
 void RemoveObject(int32_t id);
 void RemoveObjects(int32_t* ids, int32_t count);
+void FreeImpulse(Impulse* impulse);
+void FreeObject(Object* obj);
+void FreeWorld(World* world);
 */
 import "C"
 
