@@ -1,0 +1,49 @@
+// flatc --go --gen-object-api -o ./generated game_schema.fbs
+
+namespace Game;
+
+// Enum для ObjectType
+enum ObjectType : int {
+  Other = 0,
+  Creature,
+  Projectile,
+  Effect,
+  Terrain,
+  Structure,
+  Item
+}
+
+// 2D вектор
+struct Vector {
+  X: double;
+  Y: double;
+}
+
+// Импульс (связанный список)
+table Impulse {
+  Direction: Vector;
+  Damping: double;
+  Next: Impulse;
+}
+
+// Объект
+table Object {
+  ID: int;
+  Type: ObjectType;
+  Client: bool;
+  Size: Vector;
+  Velocity: Vector;
+  Position: Vector;
+  Anchor: Vector;
+  GravityFactor: double;
+  Impulses: Impulse;
+}
+
+// Игровой мир
+table World {
+  Gravity: double;
+  Boundary: Vector;
+  Objects: [Object];
+}
+
+root_type World;

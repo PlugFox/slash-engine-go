@@ -2,6 +2,7 @@ package main
 
 /*
 #include <stdint.h>
+#include <string.h>
 #include <stdlib.h>
 
 typedef enum {
@@ -50,6 +51,7 @@ void SetWorld(World* world, double rtt);
 void Run(double tickMS);
 void Stop();
 World* GetWorldPtr();
+uint8_t* GetWorldBytes(int32_t* size);
 Object* GetObjectPtr(int32_t id);
 void UpsertObject(Object* obj);
 void UpsertObjects(Object* objects, int32_t count);
@@ -111,6 +113,42 @@ func GetWorldPtr() *C.World {
 
 	// Преобразуем Go-мир в C-мир
 	return _convertWorldToC(world)
+}
+
+//export GetWorldBytes
+func GetWorldBytes(size *C.int32_t) *C.uint8_t {
+	// Получаем объект world
+	world := singleton.GetWorld()
+	if world == nil {
+		// Если world равен nil, возвращаем null
+		if size != nil {
+			*size = 0
+		}
+		return nil
+	}
+
+	// Сериализуем мир в байты
+	data := world.ToBytes()
+	dataSize := len(data)
+
+	// Выделяем память для массива байт
+	cData := C.malloc(C.size_t(dataSize))
+	if cData == nil {
+		// Если память не выделилась, возвращаем null
+		if size != nil {
+			*size = 0
+		}
+		return nil
+	}
+
+	// Копируем данные в выделенную память
+	C.memcpy(cData, unsafe.Pointer(&data[0]), C.size_t(dataSize))
+
+	// Возвращаем размер и указатель
+	if size != nil {
+		*size = C.int32_t(dataSize)
+	}
+	return (*C.uint8_t)(cData)
 }
 
 //export GetObjectPtr

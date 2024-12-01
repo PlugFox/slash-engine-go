@@ -163,9 +163,42 @@ type World struct {
 	Objects map[int]*Object
 }
 
-// TODO: Add codec to FlatBuffers encoding and decoding for the engine's world
+// -- Public methods -- //
+
+func WorldFromBytes(data []byte) *World {
+	return deserializeWorldFromBytes(data)
+}
+
+func (world *World) ToBytes() []byte {
+	return serializeWorldToBytes(world)
+}
 
 // -- Internal methods -- //
+
+func (vec *Vector) add(other Vector) Vector {
+	return Vector{
+		X: vec.X + other.X,
+		Y: vec.Y + other.Y,
+	}
+}
+
+func (vec *Vector) addX(x float64) Vector {
+	return Vector{
+		X: vec.X + x,
+		Y: vec.Y,
+	}
+}
+
+func (vec *Vector) addY(y float64) Vector {
+	return Vector{
+		X: vec.X,
+		Y: vec.Y + y,
+	}
+}
+
+func (vec *Vector) magnitude() float64 {
+	return math.Sqrt(vec.X*vec.X + vec.Y*vec.Y)
+}
 
 // Object center position X coordinate (center of the object)
 func (obj *Object) positionCenterX() float64 {

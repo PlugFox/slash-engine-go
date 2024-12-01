@@ -42,3 +42,16 @@ func TestInitWorld(t *testing.T) {
 		}
 	})
 }
+
+func TestWorldToBytes(t *testing.T) {
+	runWithTimeout(t, func(t *testing.T) {
+		e.CreateWorld(9.8, engine.Vector{X: 6000, Y: 480})
+		t.Cleanup(e.Stop) // Ensure StopWorld is called after test
+
+		world := e.GetWorld()
+		data := world.ToBytes()
+		if len(data) == 0 {
+			t.Fatal("Expected non-empty data")
+		}
+	})
+}
