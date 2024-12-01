@@ -180,6 +180,21 @@ func RemoveObjects(ids *C.int32_t, count C.int32_t) {
 	singleton.RemoveObjects(goIDs)
 }
 
+//export FreeImpulse
+func FreeImpulse(cImpulse *C.Impulse) {
+	_freeImpulse(cImpulse)
+}
+
+//export FreeObject
+func FreeObject(cObj *C.Object) {
+	_freeObject(cObj)
+}
+
+//export FreeWorld
+func FreeWorld(cWorld *C.World) {
+	_freeWorld(cWorld)
+}
+
 // Helper function to convert bool to uint8
 func _boolToUint8(b bool) C.uint8_t {
 	if b {
@@ -352,6 +367,39 @@ func _convertWorldToGo(cWorld *C.World) *engine.World {
 	}
 
 	return world
+}
+
+func _freeImpulse(cImpulse *C.Impulse) {
+	if cImpulse == nil {
+		return
+	}
+	// Рекурсивное освобождение связного списка
+	_freeImpulse(cImpulse.Next)
+	C.free(unsafe.Pointer(cImpulse))
+}
+
+func _freeObject(cObj *C.Object) {
+	if cObj == nil {
+		return
+	}
+	// Освобождение импульсов объекта
+	_freeImpulse(cObj.Impulses)
+	C.free(unsafe.Pointer(cObj))
+}
+
+func _freeWorld(cWorld *C.World) {
+	if cWorld == nil {
+		return
+	}
+	// Освобождение массива объектов
+	if cWorld.Objects != nil {
+		cObjects := (*[1 << 30]C.Object)(unsafe.Pointer(cWorld.Objects))[:cWorld.ObjectCount:cWorld.ObjectCount]
+		for i := 0; i < int(cWorld.ObjectCount); i++ {
+			_freeObject(&cObjects[i])
+		}
+		C.free(unsafe.Pointer(cWorld.Objects))
+	}
+	C.free(unsafe.Pointer(cWorld))
 }
 
 func main() {}
