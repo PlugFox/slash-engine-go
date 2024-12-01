@@ -104,16 +104,12 @@ func (engine *Engine) GetObject(id int) *Object {
 func (engine *Engine) Stop() {
 	engine.mutex.Lock()
 	defer engine.mutex.Unlock()
-	world := engine.world
-	if world == nil {
+	if !engine.running {
 		return
 	}
-	if engine.running {
-		engine.running = false
-		close(engine.stopChannel)
-		engine.updateTicker.Stop()
-	}
-	engine.world = nil
+	engine.running = false
+	close(engine.stopChannel)  // Сигнал для завершения всех горутин
+	engine.updateTicker.Stop() // Остановка таймера
 }
 
 // Run the world update loop
@@ -128,31 +124,40 @@ func (engine *Engine) Run(tickMS float64) {
 		return
 	}
 	engine.running = true
+	engine.stopChannel = make(chan struct{})     // Создаём новый канал при запуске
+	engine.updateSignal = make(chan struct{}, 1) // Обеспечиваем буфер
 	engine.mutex.Unlock()
 
 	engine.lastUpdate = time.Now()
 	engine.updateTicker = time.NewTicker(time.Duration(tickMS) * time.Millisecond)
-	defer engine.updateTicker.Stop()
 
 	// Горутина для обработки сигналов таймера
 	go func() {
-		for range engine.updateTicker.C {
+		defer engine.updateTicker.Stop()
+		for {
 			select {
-			case engine.updateSignal <- struct{}{}:
-			default: // Skip if already updating
+			case <-engine.updateTicker.C:
+				select {
+				case engine.updateSignal <- struct{}{}:
+				default: // Skip if already updating
+				}
+			case <-engine.stopChannel:
+				return // Завершаем выполнение
 			}
 		}
 	}()
 
-	// Основной цикл обработки обновлений
-	for {
-		select {
-		case <-engine.updateSignal:
-			engine.update() // Обновляем мир
-		case <-engine.stopChannel:
-			return // Завершаем выполнение
+	// Горутина для обработки обновлений мира
+	go func() {
+		for {
+			select {
+			case <-engine.updateSignal:
+				engine.update() // Обновляем мир
+			case <-engine.stopChannel:
+				return // Завершаем выполнение
+			}
 		}
-	}
+	}()
 }
 
 // Create a new world instance
