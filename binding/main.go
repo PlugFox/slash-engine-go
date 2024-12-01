@@ -3,121 +3,200 @@ package main
 /*
 #include <stdint.h>
 #include <stdlib.h>
+
 typedef struct {
-    int id;
-    double posX;
-    double posY;
-    double velX;
-    double velY;
-    double mass;
+    double X;
+    double Y;
+} Vector;
+
+typedef struct Impulse {
+    Vector Direction;
+    double Damping;
+    struct Impulse* Next;
+} Impulse;
+
+typedef struct {
+    int32_t ID;
+    Vector Size;
+    Vector Velocity;
+    Vector Position;
+    double GravityFactor;
+    Impulse* Impulses;
+    uint8_t Particle;
 } Object;
+
+typedef struct {
+    double Gravity;
+    Vector Boundary;
+    Object* Objects;
+    int32_t ObjectCount;
+} World;
+
+// Forward declarations for exporting
+World* GetWorld();
+void StopEngine();
+void RunEngine(double tickMS);
+World* CreateWorld(double gravity, Vector boundary);
+void SetWorld(World* world);
+void SetRTT(double rtt);
+void AddImpulse(int32_t id, Vector direction, double damping);
+void SetVelocity(int32_t id, Vector velocity);
+void SetPosition(int32_t id, Vector position);
+void RemoveObjects(int32_t* ids, int32_t count);
 */
 import "C"
 
 import (
 	"unsafe"
 
-	"github.com/plugfox/slash-engine-go/pkg"
+	"github.com/plugfox/slash-engine-go/engine"
 )
 
 //nolint:gochecknoglobals
-var manager = &pkg.WorldManager{} // Create a global instance of WorldManager for the C API
+var singleton = &engine.Engine{} // Create a global instance of Engine for the C API
 
-// Initialize the world with options
-//
-//export InitWorld
-func InitWorld(
-	gravityX C.double,
-	gravityY C.double,
-	boundaryX C.double,
-	boundaryY C.double,
-	tickMS C.double,
-	rtt C.double,
-	autoStart C.int,
-) {
-	manager.InitWorld(
-		float64(gravityX),
-		float64(gravityY),
-		float64(boundaryX),
-		float64(boundaryY),
-		float64(tickMS),
-		float64(rtt),
-		autoStart != 0, // Convert C.int to Go bool
-	)
-}
-
-// Add or update objects
-//
-//export UpsertObjects
-func UpsertObjects(cObjects *C.Object, count C.int) {
-	objects := make([]*pkg.Object, count)
-	for idx := range objects {
-		obj := (*C.Object)(unsafe.Pointer(uintptr(unsafe.Pointer(cObjects)) + uintptr(idx)*unsafe.Sizeof(*cObjects)))
-		objects[idx] = &pkg.Object{
-			ID:       int(obj.id),
-			Position: pkg.Vector{X: float64(obj.posX), Y: float64(obj.posY)},
-			Velocity: pkg.Vector{X: float64(obj.velX), Y: float64(obj.velY)},
-			Mass:     float64(obj.mass),
-		}
-	}
-	manager.UpsertObjects(objects)
-}
-
-// Delete objects by IDs
-//
-//export DeleteObjects
-func DeleteObjects(ids *C.int, count C.int) {
-	// Safely convert the C array to a Go slice
-	idSlice := unsafe.Slice((*C.int)(unsafe.Pointer(ids)), count)
-
-	// Convert C.int slice directly to []int without extra copying
-	toDelete := make([]int, count)
-	for i := range toDelete {
-		toDelete[i] = int(idSlice[i])
-	}
-
-	// Call manager to delete objects
-	manager.DeleteObjects(toDelete)
-}
-
-// Apply impulse to an object
-//
-//export ApplyImpulse
-func ApplyImpulse(objectID C.int, impulseX C.double, impulseY C.double) {
-	manager.ApplyImpulse(int(objectID), float64(impulseX), float64(impulseY))
-}
-
-// Get all object positions
-//
-//export GetObjectPositions
-func GetObjectPositions(outCount *C.int) *C.Object {
-	objects := manager.GetObjectPositions()
-	count := len(objects)
-	if count == 0 {
+//export GetWorld
+func GetWorld() *C.World {
+	// Получаем указатель на текущий мир
+	world := singleton.GetWorld()
+	if world == nil {
 		return nil
 	}
-	*outCount = C.int(count) // Записываем количество объектов
-	cObjects := C.malloc(C.size_t(count) * C.size_t(C.sizeof_Object))
-	i := 0
-	for _, obj := range objects {
-		cObj := (*C.Object)(unsafe.Pointer(uintptr(cObjects) + uintptr(i)*C.sizeof_Object))
-		cObj.id = C.int(obj.ID)
-		cObj.posX = C.double(obj.Position.X)
-		cObj.posY = C.double(obj.Position.Y)
-		cObj.velX = C.double(obj.Velocity.X)
-		cObj.velY = C.double(obj.Velocity.Y)
-		cObj.mass = C.double(obj.Mass)
-		i++
+
+	// Создаем C-структуру World
+	cWorld := (*C.World)(C.malloc(C.size_t(C.sizeof_World)))
+
+	// Заполняем поля World
+	cWorld.Gravity = C.double(world.Gravity)
+	cWorld.Boundary = C.Vector{
+		X: C.double(world.Boundary.X),
+		Y: C.double(world.Boundary.Y),
 	}
 
-	return (*C.Object)(cObjects)
+	// Преобразуем карту Objects в массив объектов
+	objectCount := len(world.Objects)
+	cWorld.ObjectCount = C.int32_t(objectCount)
+
+	if objectCount > 0 {
+		cWorld.Objects = (*C.Object)(C.malloc(C.size_t(objectCount) * C.size_t(C.sizeof_Object)))
+
+		// Получаем массив C-объектов
+		cObjects := (*[1 << 30]C.Object)(unsafe.Pointer(cWorld.Objects))[:objectCount:objectCount]
+
+		i := 0
+		for _, obj := range world.Objects {
+			// Конвертируем Go-объект в C-объект
+			cObjects[i] = C.Object{
+				ID:            C.int32_t(obj.ID),
+				Size:          C.Vector{X: C.double(obj.Size.X), Y: C.double(obj.Size.Y)},
+				Velocity:      C.Vector{X: C.double(obj.Velocity.X), Y: C.double(obj.Velocity.Y)},
+				Position:      C.Vector{X: C.double(obj.Position.X), Y: C.double(obj.Position.Y)},
+				GravityFactor: C.double(obj.GravityFactor),
+				Particle:      C.uint8_t(0),
+			}
+
+			// Если это частица, устанавливаем флаг
+			if obj.Particle {
+				cObjects[i].Particle = C.uint8_t(1)
+			}
+
+			// Преобразуем импульсы
+			cObjects[i].Impulses = convertImpulsesToC(obj.Impulses)
+
+			i++
+		}
+	} else {
+		cWorld.Objects = nil
+	}
+
+	return cWorld
 }
 
-// Stop and clear the world
-//
-//export StopWorld
-func StopWorld() {
-	manager.StopWorld()
+// Вспомогательная функция для преобразования связного списка импульсов
+func convertImpulsesToC(goImpulse *engine.Impulse) *C.Impulse {
+	if goImpulse == nil {
+		return nil
+	}
+
+	// Рекурсивное преобразование импульсов
+	cImpulse := (*C.Impulse)(C.malloc(C.size_t(C.sizeof_Impulse)))
+	cImpulse.Direction = C.Vector{
+		X: C.double(goImpulse.Direction.X),
+		Y: C.double(goImpulse.Direction.Y),
+	}
+	cImpulse.Damping = C.double(goImpulse.Damping)
+	cImpulse.Next = convertImpulsesToC(goImpulse.Next)
+
+	return cImpulse
+}
+
+//export StopEngine
+func StopEngine() {
+	singleton.Stop()
+}
+
+//export RunEngine
+func RunEngine(tickMS C.double) {
+	singleton.Run(float64(tickMS))
+}
+
+//export CreateWorld
+func CreateWorld(gravity C.double, boundary C.Vector) *C.World {
+	goBoundary := engine.Vector{X: float64(boundary.X), Y: float64(boundary.Y)}
+	world := singleton.CreateWorld(float64(gravity), goBoundary)
+
+	cWorld := (*C.World)(C.malloc(C.size_t(C.sizeof_World)))
+	cWorld.Gravity = C.double(world.Gravity)
+	cWorld.Boundary = C.Vector{
+		X: C.double(world.Boundary.X),
+		Y: C.double(world.Boundary.Y),
+	}
+	cWorld.ObjectCount = C.int32_t(len(world.Objects))
+	return cWorld
+}
+
+//export SetWorld
+func SetWorld(world *C.World) {
+	goBoundary := engine.Vector{X: float64(world.Boundary.X), Y: float64(world.Boundary.Y)}
+	goWorld := &engine.World{
+		Gravity:  float64(world.Gravity),
+		Boundary: goBoundary,
+		Objects:  make(map[int]*engine.Object), // Empty map for now
+	}
+	singleton.SetWorld(goWorld)
+}
+
+//export SetRTT
+func SetRTT(rtt C.double) {
+	singleton.SetRTT(float64(rtt))
+}
+
+//export AddImpulse
+func AddImpulse(id C.int32_t, direction C.Vector, damping C.double) {
+	goDirection := engine.Vector{X: float64(direction.X), Y: float64(direction.Y)}
+	singleton.AddImpulse(int(id), goDirection, float64(damping))
+}
+
+//export SetVelocity
+func SetVelocity(id C.int32_t, velocity C.Vector) {
+	goVelocity := engine.Vector{X: float64(velocity.X), Y: float64(velocity.Y)}
+	singleton.SetVelocity(int(id), goVelocity)
+}
+
+//export SetPosition
+func SetPosition(id C.int32_t, position C.Vector) {
+	goPosition := engine.Vector{X: float64(position.X), Y: float64(position.Y)}
+	singleton.SetPosition(int(id), goPosition)
+}
+
+//export RemoveObjects
+func RemoveObjects(ids *C.int32_t, count C.int32_t) {
+	goIDs := make([]int, count)
+	idSlice := (*[1 << 30]C.int32_t)(unsafe.Pointer(ids))[:count:count]
+	for i, id := range idSlice {
+		goIDs[i] = int(id)
+	}
+	singleton.RemoveObjects(goIDs)
 }
 
 func main() {}

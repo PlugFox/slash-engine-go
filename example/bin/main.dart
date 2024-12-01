@@ -1,95 +1,134 @@
+// ignore_for_file: unused_local_variable
+
 import 'dart:async';
 import 'dart:ffi' as ffi;
 import 'dart:io' as io;
 
 import 'package:ffi/ffi.dart' as ffi;
 
-/// Struct for Object (corresponds to Go's C.Object)
+/// Vector struct (corresponds to Go's Vector)
+final class VectorStruct extends ffi.Struct {
+  @ffi.Double()
+  external double X;
+
+  @ffi.Double()
+  external double Y;
+}
+
+/// Impulse struct (corresponds to Go's Impulse)
+final class ImpulseStruct extends ffi.Struct {
+  external VectorStruct Direction;
+
+  @ffi.Double()
+  external double Damping;
+
+  external ffi.Pointer<ImpulseStruct> Next;
+}
+
+/// Object struct (corresponds to Go's Object)
 final class ObjectStruct extends ffi.Struct {
   @ffi.Int32()
-  external int id;
+  external int ID;
+
+  external VectorStruct Size;
+  external VectorStruct Velocity;
+  external VectorStruct Position;
 
   @ffi.Double()
-  external double posX;
+  external double GravityFactor;
 
-  @ffi.Double()
-  external double posY;
+  external ffi.Pointer<ImpulseStruct> Impulses;
 
-  @ffi.Double()
-  external double velX;
+  @ffi.Uint8()
+  external int Particle; // 0 = false, 1 = true
+}
 
+/// World struct (corresponds to Go's World)
+final class WorldStruct extends ffi.Struct {
   @ffi.Double()
-  external double velY;
+  external double Gravity;
 
-  @ffi.Double()
-  external double mass;
+  external VectorStruct Boundary;
+
+  external ffi.Pointer<ObjectStruct> Objects;
+
+  @ffi.Int32()
+  external int ObjectCount;
 }
 
 // Function typedefs
 
-typedef _InitWorldWithOptionsC = ffi.Void Function(
-  ffi.Double gravityX,
-  ffi.Double gravityY,
-  ffi.Double boundaryX,
-  ffi.Double boundaryY,
-  ffi.Double tickMS,
-  ffi.Double rtt,
-  ffi.Uint8 autoStart,
+// GetWorld function
+typedef _GetWorldC = ffi.Pointer<WorldStruct> Function();
+typedef GetWorldDart = ffi.Pointer<WorldStruct> Function();
+
+// StopEngine function
+typedef _StopEngineC = ffi.Void Function();
+typedef StopEngineDart = void Function();
+
+// RunEngine function
+typedef _RunEngineC = ffi.Void Function(ffi.Double tickMS);
+typedef RunEngineDart = void Function(double tickMS);
+
+// CreateWorld function
+typedef _CreateWorldC = ffi.Pointer<WorldStruct> Function(
+  ffi.Double gravity,
+  ffi.Pointer<VectorStruct> boundary,
+);
+typedef CreateWorldDart = ffi.Pointer<WorldStruct> Function(
+  double gravity,
+  ffi.Pointer<VectorStruct> boundary,
 );
 
-typedef InitWorldWithOptionsDart = void Function(
-  double gravityX,
-  double gravityY,
-  double boundaryX,
-  double boundaryY,
-  double tickMS,
-  double rtt,
-  int autoStart,
+// SetWorld function
+typedef _SetWorldC = ffi.Void Function(ffi.Pointer<WorldStruct> world);
+typedef SetWorldDart = void Function(ffi.Pointer<WorldStruct> world);
+
+// SetRTT function
+typedef _SetRTTC = ffi.Void Function(ffi.Double rtt);
+typedef SetRTTDart = void Function(double rtt);
+
+// AddImpulse function
+typedef _AddImpulseC = ffi.Void Function(
+  ffi.Int32 id,
+  ffi.Pointer<VectorStruct> direction,
+  ffi.Double damping,
+);
+typedef AddImpulseDart = void Function(
+  int id,
+  ffi.Pointer<VectorStruct> direction,
+  double damping,
 );
 
-typedef _UpsertObjectsC = ffi.Void Function(
-  ffi.Pointer<ObjectStruct> objects,
-  ffi.Int32 count,
+// SetVelocity function
+typedef _SetVelocityC = ffi.Void Function(
+  ffi.Int32 id,
+  ffi.Pointer<VectorStruct> velocity,
+);
+typedef SetVelocityDart = void Function(
+  int id,
+  ffi.Pointer<VectorStruct> velocity,
 );
 
-typedef UpsertObjectsDart = void Function(
-  ffi.Pointer<ObjectStruct> objects,
-  int count,
+// SetPosition function
+typedef _SetPositionC = ffi.Void Function(
+  ffi.Int32 id,
+  ffi.Pointer<VectorStruct> position,
+);
+typedef SetPositionDart = void Function(
+  int id,
+  ffi.Pointer<VectorStruct> position,
 );
 
-typedef _GetObjectPositionsC = ffi.Pointer<ObjectStruct> Function(
-  ffi.Pointer<ffi.Int32>,
-);
-
-typedef GetObjectPositionsDart = ffi.Pointer<ObjectStruct> Function(
-  ffi.Pointer<ffi.Int32>,
-);
-
-typedef _DeleteObjectsC = ffi.Void Function(
+// RemoveObjects function
+typedef _RemoveObjectsC = ffi.Void Function(
   ffi.Pointer<ffi.Int32> ids,
   ffi.Int32 count,
 );
-
-typedef DeleteObjectsDart = void Function(
+typedef RemoveObjectsDart = void Function(
   ffi.Pointer<ffi.Int32> ids,
   int count,
 );
-
-typedef _ApplyImpulseC = ffi.Void Function(
-  ffi.Int32 objectID,
-  ffi.Double impulseX,
-  ffi.Double impulseY,
-);
-
-typedef ApplyImpulseDart = void Function(
-  int objectID,
-  double impulseX,
-  double impulseY,
-);
-
-typedef _StopWorldC = ffi.Void Function();
-
-typedef StopWorldDart = void Function();
 
 /// Before running this example, make sure to build the library:
 /// `make binding_darwin_arm64` or `make binding_windows_amd64`
@@ -103,126 +142,85 @@ void main() {
   final lib = openLib();
 
   // Load functions
-  final initWorld =
-      lib.lookupFunction<_InitWorldWithOptionsC, InitWorldWithOptionsDart>(
-    'InitWorld',
-  );
+  final getWorld = lib.lookupFunction<_GetWorldC, GetWorldDart>('GetWorld');
 
-  final upsertObjects = lib.lookupFunction<_UpsertObjectsC, UpsertObjectsDart>(
-    'UpsertObjects',
-  );
+  final stopEngine =
+      lib.lookupFunction<_StopEngineC, StopEngineDart>('StopEngine');
 
-  final getObjectPositions =
-      lib.lookupFunction<_GetObjectPositionsC, GetObjectPositionsDart>(
-    'GetObjectPositions',
-  );
+  final runEngine = lib.lookupFunction<_RunEngineC, RunEngineDart>('RunEngine');
 
-  final deleteObjects = lib.lookupFunction<_DeleteObjectsC, DeleteObjectsDart>(
-    'DeleteObjects',
-  );
+  final createWorld =
+      lib.lookupFunction<_CreateWorldC, CreateWorldDart>('CreateWorld');
 
-  final applyImpulse = lib.lookupFunction<_ApplyImpulseC, ApplyImpulseDart>(
-    'ApplyImpulse',
-  );
+  final setWorld = lib.lookupFunction<_SetWorldC, SetWorldDart>('SetWorld');
 
-  final stopWorld = lib.lookupFunction<_StopWorldC, StopWorldDart>(
-    'StopWorld',
-  );
+  final setRTT = lib.lookupFunction<_SetRTTC, SetRTTDart>('SetRTT');
+
+  final addImpulse =
+      lib.lookupFunction<_AddImpulseC, AddImpulseDart>('AddImpulse');
+
+  final setVelocity =
+      lib.lookupFunction<_SetVelocityC, SetVelocityDart>('SetVelocity');
+
+  final setPosition =
+      lib.lookupFunction<_SetPositionC, SetPositionDart>('SetPosition');
+
+  final removeObjects =
+      lib.lookupFunction<_RemoveObjectsC, RemoveObjectsDart>('RemoveObjects');
 
   // Example usage
 
-  // Initialize world
-  initWorld(
-    0, // gravityX
-    -9.8, // gravityY
-    6000, // boundaryX
-    700, // boundaryY
-    16.67, // tickMS
-    0.1, // rtt
-    1, // autoStart
-  );
+  // Create world
+  final boundary = ffi.calloc<VectorStruct>();
+  boundary.ref.X = 6000.0;
+  boundary.ref.Y = 480.0;
+  final world = createWorld(9.8, boundary);
+  ffi.calloc.free(boundary);
 
-  // Create objects
-  final objectList = [
-    ffi.Struct.create<ObjectStruct>()
-      ..id = 1
-      ..posX = 10.0
-      ..posY = 50.0
-      ..velX = 0.0
-      ..velY = 0.0
-      ..mass = 1.0,
-    for (var i = 2; i <= 1000; i++)
-      ffi.Struct.create<ObjectStruct>()
-        ..id = i
-        ..posX = 20.0
-        ..posY = 60.0
-        ..velX = 1.0
-        ..velY = 1.0
-        ..mass = 2.0,
-  ];
-  final objectPointer = ffi.calloc<ObjectStruct>(objectList.length);
-  for (var i = 0; i < objectList.length; i++) {
-    objectPointer[i] = objectList[i];
+  setRTT(0.016); // Set RTT to 16ms
+
+  world.ref.ObjectCount = 5;
+  world.ref.Objects = ffi.calloc<ObjectStruct>(5);
+  for (var i = 0; i < 5; i++) {
+    final object = world.ref.Objects + i;
+    object.ref.ID = i + 1;
+    object.ref.Size.X = 24.0;
+    object.ref.Size.Y = 64.0;
+    object.ref.Velocity.X = 0.0;
+    object.ref.Velocity.Y = 0.0;
+    object.ref.Position.X = 100.0 + i * 32.0;
+    object.ref.Position.Y = 100.0;
+    object.ref.GravityFactor = 1.0;
+    object.ref.Particle = 0;
+    object.ref.Impulses = ffi.nullptr;
   }
-  upsertObjects(objectPointer, objectList.length);
-  ffi.malloc.free(objectPointer);
+  setWorld(world);
 
-  // Apply impulse to an object
-  applyImpulse(1, 5.0, 18.0);
-  Timer(Duration(milliseconds: 40), () {
-    final countPtr = ffi.calloc<ffi.Int32>();
-    final objects = getObjectPositions(countPtr);
-    // Get count:
-    final count = countPtr.value;
-    ffi.calloc.free(countPtr); // Освобождаем память
-    print('Object count: $count');
-    final map = <int, ObjectStruct>{};
-    for (var i = 0; i < count; i++) {
-      final object = (objects + i).ref;
-      map[object.id] = object;
-    }
-    final object = map[1]!;
-    assert(object.posX >= 0 && object.posY >= 0 && object.id == 1);
-    print('Object #${object.id}: (${object.posX}, ${object.posY})');
-  });
+  print('World created with gravity: ${world.ref.Gravity}');
 
-  // Get object positions
-  Timer(Duration(seconds: 2), () {
-    for (var i = 0; i < 10; i++) {
-      final countPtr = ffi.calloc<ffi.Int32>();
-      final objects = getObjectPositions(countPtr);
-      final count = countPtr.value;
-      ffi.calloc.free(countPtr); // Освобождаем память
-      for (var j = 0; j < count; j++) {
-        final object = (objects + j).ref;
-        //print('Object #${object.id}: (${object.posX}, ${object.posY})');
-        assert(object.posX >= 0 && object.posY >= 0);
-      }
-      ffi.malloc.free(objects);
-    }
-    final stopWatch = Stopwatch()..start();
-    final countPtr = ffi.calloc<ffi.Int32>();
-    final objects = getObjectPositions(countPtr);
-    final count = countPtr.value;
-    ffi.calloc.free(countPtr);
-    assert(objects.ref.posX >= 0 && objects.ref.posY >= 0 && count > 0);
-    ffi.malloc.free(objects);
-    print('Time per call: ${stopWatch.elapsedMicroseconds / 1000} ms');
-  });
+  // Add impulse
+  final direction = ffi.calloc<VectorStruct>();
+  direction.ref.X = 10.0;
+  direction.ref.Y = 20.0;
+  addImpulse(1, direction, 0.95);
+  ffi.calloc.free(direction);
 
-  // Delete objects
-  Timer(Duration(seconds: 3), () {
-    final ids = ffi.calloc<ffi.Int32>(2);
-    ids[0] = 1;
-    ids[1] = 2;
-    deleteObjects(ids, 2);
-    ffi.malloc.free(ids);
-  });
+  // Set velocity
+  final velocity = ffi.calloc<VectorStruct>();
+  velocity.ref.X = 5.0;
+  velocity.ref.Y = 0.0;
+  setVelocity(2, velocity);
+  ffi.calloc.free(velocity);
 
-  Timer(Duration(seconds: 5), () {
-    stopWorld();
-    io.sleep(Duration(milliseconds: 250));
-    io.exit(0);
+  runEngine(16.67); // Run engine for 16ms
+
+  Timer(const Duration(milliseconds: 48), () {
+    final world = getWorld();
+
+    print('World object count: ${world.ref.ObjectCount}');
+
+    // Stop engine
+    stopEngine();
   });
 }
 

@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"fmt"
 	"math"
 	"sync"
 	"time"
@@ -99,19 +100,6 @@ func (engine *Engine) GetObject(id int) *Object {
 	return world.Objects[id]
 }
 
-// Create a new world instance
-func (engine *Engine) Create(gravity float64, boundary Vector) *World {
-	engine.mutex.Lock()
-	defer engine.mutex.Unlock()
-	world := &World{
-		Gravity:  gravity,
-		Boundary: boundary,
-		Objects:  make(map[int]*Object),
-	}
-	engine.world = world
-	return world
-}
-
 // Stop and clear the world
 func (engine *Engine) Stop() {
 	engine.mutex.Lock()
@@ -130,6 +118,10 @@ func (engine *Engine) Stop() {
 
 // Run the world update loop
 func (engine *Engine) Run(tickMS float64) {
+	if tickMS <= 0 {
+		panic(fmt.Errorf("invalid tickMS: %v", tickMS))
+	}
+
 	engine.mutex.Lock()
 	if engine.running || engine.world == nil {
 		engine.mutex.Unlock()
@@ -142,28 +134,38 @@ func (engine *Engine) Run(tickMS float64) {
 	engine.updateTicker = time.NewTicker(time.Duration(tickMS) * time.Millisecond)
 	defer engine.updateTicker.Stop()
 
+	// Горутина для обработки сигналов таймера
 	go func() {
-		for {
+		for range engine.updateTicker.C {
 			select {
-			case <-engine.updateTicker.C:
-				select {
-				case engine.updateSignal <- struct{}{}:
-				default: // Skip if already updating
-				}
-			case <-engine.stopChannel:
-				return
+			case engine.updateSignal <- struct{}{}:
+			default: // Skip if already updating
 			}
 		}
 	}()
 
+	// Основной цикл обработки обновлений
 	for {
 		select {
 		case <-engine.updateSignal:
-			engine.update()
+			engine.update() // Обновляем мир
 		case <-engine.stopChannel:
-			return
+			return // Завершаем выполнение
 		}
 	}
+}
+
+// Create a new world instance
+func (engine *Engine) CreateWorld(gravity float64, boundary Vector) *World {
+	engine.mutex.Lock()
+	defer engine.mutex.Unlock()
+	world := &World{
+		Gravity:  gravity,
+		Boundary: boundary,
+		Objects:  make(map[int]*Object),
+	}
+	engine.world = world
+	return world
 }
 
 // Set the world instance
