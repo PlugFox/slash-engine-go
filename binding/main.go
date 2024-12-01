@@ -157,13 +157,63 @@ func CreateWorld(gravity C.double, boundary C.Vector) *C.World {
 
 //export SetWorld
 func SetWorld(world *C.World) {
-	goBoundary := engine.Vector{X: float64(world.Boundary.X), Y: float64(world.Boundary.Y)}
+	if world == nil {
+		singleton.SetWorld(nil)
+		return
+	}
+
+	// Преобразуем границы мира
+	goBoundary := engine.Vector{
+		X: float64(world.Boundary.X),
+		Y: float64(world.Boundary.Y),
+	}
+
+	// Создаём новый объект мира
 	goWorld := &engine.World{
 		Gravity:  float64(world.Gravity),
 		Boundary: goBoundary,
-		Objects:  make(map[int]*engine.Object), // Empty map for now
+		Objects:  make(map[int]*engine.Object),
 	}
+
+	// Преобразуем C-объекты в Go-объекты
+	if world.Objects != nil && world.ObjectCount > 0 {
+		cObjects := (*[1 << 30]C.Object)(unsafe.Pointer(world.Objects))[:world.ObjectCount:world.ObjectCount]
+		for _, cObj := range cObjects {
+			// Преобразуем каждый C-объект
+			goObj := &engine.Object{
+				ID:            int(cObj.ID),
+				Size:          engine.Vector{X: float64(cObj.Size.X), Y: float64(cObj.Size.Y)},
+				Velocity:      engine.Vector{X: float64(cObj.Velocity.X), Y: float64(cObj.Velocity.Y)},
+				Position:      engine.Vector{X: float64(cObj.Position.X), Y: float64(cObj.Position.Y)},
+				GravityFactor: float64(cObj.GravityFactor),
+				Particle:      cObj.Particle != 0,
+				Impulses:      convertImpulsesToGo(cObj.Impulses),
+			}
+			goWorld.Objects[goObj.ID] = goObj
+		}
+	}
+
+	// Устанавливаем преобразованный мир в движок
 	singleton.SetWorld(goWorld)
+}
+
+// Вспомогательная функция для преобразования C-списка импульсов в Go-список
+func convertImpulsesToGo(cImpulse *C.Impulse) *engine.Impulse {
+	if cImpulse == nil {
+		return nil
+	}
+
+	// Рекурсивное преобразование импульсов
+	goImpulse := &engine.Impulse{
+		Direction: engine.Vector{
+			X: float64(cImpulse.Direction.X),
+			Y: float64(cImpulse.Direction.Y),
+		},
+		Damping: float64(cImpulse.Damping),
+		Next:    convertImpulsesToGo(cImpulse.Next),
+	}
+
+	return goImpulse
 }
 
 //export SetRTT

@@ -170,33 +170,43 @@ void main() {
 
   // Example usage
 
-  // Create world
-  final boundary = ffi.calloc<VectorStruct>();
-  boundary.ref.X = 6000.0;
-  boundary.ref.Y = 480.0;
-  final world = createWorld(9.8, boundary);
-  ffi.calloc.free(boundary);
+  {
+    // Create world
+    final boundary = ffi.calloc<VectorStruct>();
+    boundary.ref.X = 6000.0;
+    boundary.ref.Y = 480.0;
+    final world = createWorld(9.8, boundary);
+    ffi.calloc.free(boundary);
 
-  setRTT(0.016); // Set RTT to 16ms
+    setRTT(0.016); // Set RTT to 16ms
 
-  world.ref.ObjectCount = 5;
-  world.ref.Objects = ffi.calloc<ObjectStruct>(5);
-  for (var i = 0; i < 5; i++) {
-    final object = world.ref.Objects + i;
-    object.ref.ID = i + 1;
-    object.ref.Size.X = 24.0;
-    object.ref.Size.Y = 64.0;
-    object.ref.Velocity.X = 0.0;
-    object.ref.Velocity.Y = 0.0;
-    object.ref.Position.X = 100.0 + i * 32.0;
-    object.ref.Position.Y = 100.0;
-    object.ref.GravityFactor = 1.0;
-    object.ref.Particle = 0;
-    object.ref.Impulses = ffi.nullptr;
+    world.ref.ObjectCount = 5;
+    world.ref.Objects = ffi.calloc<ObjectStruct>(5);
+    for (var i = 0; i < 5; i++) {
+      final object = world.ref.Objects + i;
+      object.ref.ID = i + 1;
+      object.ref.Size.X = 24.0;
+      object.ref.Size.Y = 64.0;
+      object.ref.Velocity.X = 0.0;
+      object.ref.Velocity.Y = 0.0;
+      object.ref.Position.X = 100.0 + i * 32.0;
+      object.ref.Position.Y = 100.0;
+      object.ref.GravityFactor = 1.0;
+      object.ref.Particle = 0;
+      object.ref.Impulses = ffi.nullptr;
+    }
+    setWorld(world);
   }
-  setWorld(world);
 
-  print('World created with gravity: ${world.ref.Gravity}');
+  {
+    // Get world info
+    final world = getWorld();
+    print(
+      'World created with gravity: ${world.ref.Gravity}, '
+      'boundary: ${world.ref.Boundary.X}x${world.ref.Boundary.Y}, '
+      '${world.ref.ObjectCount} objects',
+    );
+  }
 
   // Add impulse
   final direction = ffi.calloc<VectorStruct>();
@@ -212,12 +222,28 @@ void main() {
   setVelocity(2, velocity);
   ffi.calloc.free(velocity);
 
+  // Delete objects
+  final ids = ffi.calloc<ffi.Int32>(2);
+  ids[0] = 3;
+  ids[1] = 4;
+  removeObjects(ids, 2);
+
   runEngine(16.67); // Run engine for 16ms
 
-  Timer(const Duration(milliseconds: 48), () {
+  Timer(const Duration(milliseconds: 200), () {
     final world = getWorld();
 
-    print('World object count: ${world.ref.ObjectCount}');
+    final buffer = StringBuffer()
+      ..writeln('Objects count: ${world.ref.ObjectCount}');
+    for (var i = 0; i < world.ref.ObjectCount; i++) {
+      final object = (world.ref.Objects + i).ref;
+      buffer.writeln(
+        'Object ${object.ID}: '
+        'position: ${object.Position.X}x${object.Position.Y}, '
+        'velocity: ${object.Velocity.X}x${object.Velocity.Y}',
+      );
+    }
+    print(buffer.toString());
 
     // Stop engine
     stopEngine();
